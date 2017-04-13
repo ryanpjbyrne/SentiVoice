@@ -10,12 +10,10 @@ import audioop
 from collections import deque
 import time
 import math
-
-"""
-Written by Sophie Li, 2016
-http://blog.justsophie.com/python-speech-to-text-with-pocketsphinx/
-"""
-
+import random
+import nltk
+import re
+from random import randint
 class SpeechDetector:
     def __init__(self):
         # Microphone stream config.
@@ -24,7 +22,7 @@ class SpeechDetector:
         self.CHANNELS = 1
         self.RATE = 16000
 
-        self.SILENCE_LIMIT = 1  # Silence limit in seconds. The max ammount of seconds where
+        self.SILENCE_LIMIT = 2.5 # Silence limit in seconds. The max ammount of seconds where
                            # only silence is recorded. When this time passes the
                            # recording finishes and the file is decoded
 
@@ -78,16 +76,16 @@ class SpeechDetector:
 
     def save_speech(self, data, p):
         """
-        Saves mic data to temporary WAV file. Returns filename of saved
+        Saves mic data to WAV file. Returns filename of saved
         file
         """
-        filename = 'output_'+str(int(time.time()))
+        filename = 'SpeechOutput' +str(int(time.time()))
         # writes data to WAV file
         data = ''.join(data)
         wf = wave.open(filename + '.wav', 'wb')
         wf.setnchannels(1)
         wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
-        wf.setframerate(16000)  # TODO make this value a function parameter?
+        wf.setframerate(16000)  
         wf.writeframes(data)
         wf.close()
         return filename + '.wav'
@@ -104,8 +102,23 @@ class SpeechDetector:
         self.decoder.end_utt()
         words = []
         [words.append(seg.word) for seg in self.decoder.seg()]
-        textfile=open('test.txt', 'w')
-        words=map(lambda x:" "+ x+" ",words) 
+        print words
+        print (" press 'y' to store words or 'n' to discard")
+        yes= set(['yes','y'])
+        no=set(['no', 'n'])
+        cont= True
+        choice = raw_input().lower()
+        while cont is True:
+            if choice in yes:
+                cont= False
+            if choice in no:
+                print("Words not stored")
+                return "Discarded"
+        txt="Words"+str(int(time.time()))+".txt"
+        textfile=open(txt, 'w')
+        stop_list=(['<s>','[SPEECH]','</s>','<sil>','[NOISE]'])
+        words=[w.replace('(','').replace(')','').replace('2','').replace('3','') for w in words if w not in stop_list]
+        words=map(lambda x: ""+x +" ",words)
         textfile.writelines(words)
         return words
 
@@ -124,6 +137,7 @@ class SpeechDetector:
                         input=True, 
                         frames_per_buffer=self.CHUNK)
         print "* Mic set up and listening. "
+	
 
         audio2send = []
         cur_data = ''  # current chunk of audio data
@@ -147,23 +161,35 @@ class SpeechDetector:
                 print "Finished recording, decoding phrase"
                 filename = self.save_speech(list(prev_audio) + audio2send, p)
                 r = self.decode_phrase(filename)
-		
-		
-                print "DETECTED: ", r
+                
+                # Remove audio file
+                if r== "Discarded":
+                    os.remove(filename)
+                #print "DETECTED: ", r
+                print "To continue recording please press y"
+                yes= set(['yes','y'])
+                cont= True
+                choice = raw_input().lower()
+                while cont is True:
+                    if choice in yes:
+                        cont= False
 
-                # Removes temp audio file
-		#os.remove(filename)
+
+                
+                
+		
                 # Reset all
                 started = False
                 slid_win = deque(maxlen=self.SILENCE_LIMIT * rel)
                 prev_audio = deque(maxlen=0.5 * rel)
                 audio2send = []
-                print "Listening ..."
+                print "Listening...."
+                
 
             else:
                 prev_audio.append(cur_data)
 
-        print "* Done listening"
+        print "Done listening"
         stream.close()
         p.terminate()
 
